@@ -15,13 +15,11 @@
     {
       "binding": "DB",
       "database_name": "shop-manager-db",
-      "database_id": "PASTE_YOUR_DATABASE_ID_HERE",
+      "database_id": "1ffcc3ca-bd91-4d71-875b-c8a675336436",
       "migrations_dir": "migrations"
     }
   ],
-  "r2_buckets": [
-    { "binding": "FILES", "bucket_name": "shop-manager-files" }
-  ],
+  
   "vars": { "TZ": "Asia/Karachi" },
   "observability": { "enabled": true }
 }
