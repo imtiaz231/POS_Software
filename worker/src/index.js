@@ -11,7 +11,7 @@ app.use('*', async (c, next) => {
   await next();
 });
 app.use('/api/*', async (c, next) => {
-  if (!c.env.JWT_SECRET || c.env.JWT_SECRET === 'change-me')
+  if (!c.env.JWT_SECRET || c.env.JWT_SECRET === 'c09991e587d39d7e8443a0a21f10fae82b5009b352303e1198e0bae7f1d1a897574b3e31be253454769683142581fcfef23316409b288b45ce03a0e870fe96f7')
     return c.json({ error: 'Server is not configured: set the JWT_SECRET secret.' }, 500);
   await next();
 });
