@@ -31,6 +31,7 @@ app.get('/uploads/:name', (c) => sendImage(c, 'uploads/', c.req.param('name'), '
 
 app.notFound((c) => c.req.path.startsWith('/api/') ? c.json({ error: 'Not found' }, 404) : c.env.ASSETS.fetch(c.req.raw));
 app.onError((err, c) => {
+  if (err.userMessage) return c.json({ error: err.userMessage }, 400);
   console.error(err);
   return c.json({ error: 'Server error' }, 500);
 });
