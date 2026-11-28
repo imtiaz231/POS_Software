@@ -11,12 +11,17 @@ app.use('*', async (c, next) => {
   await next();
 });
 app.use('/api/*', async (c, next) => {
-  if (!c.env.JWT_SECRET || c.env.JWT_SECRET === 'c09991e587d39d7e8443a0a21f10fae82b5009b352303e1198e0bae7f1d1a897574b3e31be253454769683142581fcfef23316409b288b45ce03a0e870fe96f7')
+  if (!c.env.JWT_SECRET || String(c.env.JWT_SECRET).length < 16)
     return c.json({ error: 'Server is not configured: set the JWT_SECRET secret.' }, 500);
   await next();
 });
 
-app.get('/api/health', (c) => c.json({ ok: true }));
+// Shows only true/false (never the values) so you can check the Cloudflare setup
+app.get('/api/health', (c) => c.json({
+  ok: true,
+  db: !!c.env.DB, r2: !!c.env.FILES,
+  secrets: { JWT_SECRET: !!c.env.JWT_SECRET, ADMIN_USERNAME: !!c.env.ADMIN_USERNAME, ADMIN_PASSWORD: !!c.env.ADMIN_PASSWORD },
+}));
 app.get('/api/public/status', async (c) => {
   const s = await getSettings(c.get('db'));
   return c.json({ app_name: s.app_name, maintenance: s.maintenance_mode === '1', message: s.maintenance_message });
