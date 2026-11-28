@@ -26,7 +26,7 @@ export const defaults = {
 
 export async function getSettings(db) {
   const o = { ...defaults };
-  for (const r of await db.all('SELECT key,value FROM settings')) o[r.key] = r.value;
+  for (const r of await db.all('SELECT key,value FROM settings')) if (r.key in defaults) o[r.key] = r.value;
   return o;
 }
 export const log = (db, shopId, actor, action, details = '') =>
@@ -63,12 +63,25 @@ export async function checkPassword(pw, stored) {
 }
 
 /* ---------------- Login tokens ---------------- */
-export const signToken = (c, role, id) =>
-  jwtSign({ role, id, exp: Math.floor(Date.now() / 1000) + 12 * 3600 }, c.env.JWT_SECRET, 'HS256');
+// Uses the JWT_SECRET secret if it is set; otherwise a random secret is created once and kept privately in the D1 database.
+let cachedSecret = null;
+async function jwtSecret(c) {
+  if (c.env.JWT_SECRET && String(c.env.JWT_SECRET).length >= 16) return String(c.env.JWT_SECRET);
+  if (cachedSecret) return cachedSecret;
+  const db = c.get('db');
+  let row = await db.get("SELECT value FROM settings WHERE key='jwt_secret'");
+  if (!row) {
+    await db.run("INSERT OR IGNORE INTO settings(key,value) VALUES('jwt_secret',?)", hex(crypto.getRandomValues(new Uint8Array(32))));
+    row = await db.get("SELECT value FROM settings WHERE key='jwt_secret'");
+  }
+  return (cachedSecret = row.value);
+}
+export const signToken = async (c, role, id) =>
+  jwtSign({ role, id, exp: Math.floor(Date.now() / 1000) + 12 * 3600 }, await jwtSecret(c), 'HS256');
 async function parseToken(c) {
   const h = c.req.header('authorization') || '';
   if (!h.startsWith('Bearer ')) return null;
-  try { return await jwtVerify(h.slice(7), c.env.JWT_SECRET, 'HS256'); } catch { return null; }
+  try { return await jwtVerify(h.slice(7), await jwtSecret(c), 'HS256'); } catch { return null; }
 }
 
 export const hasAccess = (s) => s.status !== 'blocked' && !!s.expires_at && new Date(s.expires_at) > new Date();
