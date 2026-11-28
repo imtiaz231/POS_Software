@@ -170,19 +170,43 @@ export async function checkImage(file, maxBytes, badMsg = 'The file is not a val
   if (!(jpg || png || webp)) return { error: badMsg };
   return { bytes, ext: EXT[file.type] };
 }
-// prefix: 'uploads/' (public logos and payment screenshots) or 'bills/' (private)
+/* Photos are kept in R2 when the FILES bucket is connected; otherwise they are stored in the D1 database (table `files`).
+   prefix: 'uploads/' (public logos and payment screenshots) or 'bills/' (private) */
+const D1_MAX = 1400000;   // D1 allows about 2 MB per row; base64 adds a third
+const b64enc = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); };
+const b64dec = (str) => Uint8Array.from(atob(str), (ch) => ch.charCodeAt(0));
+const safeName = (n) => String(n).replace(/[^a-z0-9.]/gi, '');
+
 export async function saveImage(c, prefix, img) {
   const name = hex(crypto.getRandomValues(new Uint8Array(14))) + img.ext;
-  await c.env.FILES.put(prefix + name, img.bytes, { httpMetadata: { contentType: MIME[img.ext] } });
+  if (c.env.FILES) {
+    await c.env.FILES.put(prefix + name, img.bytes, { httpMetadata: { contentType: MIME[img.ext] } });
+  } else {
+    if (img.bytes.length > D1_MAX) {
+      const e = new Error('too big'); e.userMessage = 'The image is too large (maximum about 1.4 MB). Please choose a smaller photo.'; throw e;
+    }
+    await c.get('db').run('INSERT INTO files(key,type,data) VALUES(?,?,?)', prefix + name, MIME[img.ext], b64enc(img.bytes));
+  }
   return name;
 }
-export const rmImage = async (c, prefix, name) => { if (name) { try { await c.env.FILES.delete(prefix + String(name).replace(/[^a-z0-9.]/gi, '')); } catch {} } };
+export const rmImage = async (c, prefix, name) => {
+  if (!name) return;
+  try {
+    if (c.env.FILES) await c.env.FILES.delete(prefix + safeName(name));
+    else await c.get('db').run('DELETE FROM files WHERE key=?', prefix + safeName(name));
+  } catch {}
+};
 export async function sendImage(c, prefix, name, cache) {
-  const obj = await c.env.FILES.get(prefix + String(name).replace(/[^a-z0-9.]/gi, ''));
-  if (!obj) return c.json({ error: 'Not found' }, 404);
-  const h = new Headers();
-  obj.writeHttpMetadata(h);
-  h.set('Cache-Control', cache);
-  h.set('X-Content-Type-Options', 'nosniff');
-  return new Response(obj.body, { headers: h });
+  const key = prefix + safeName(name);
+  const h = new Headers({ 'Cache-Control': cache, 'X-Content-Type-Options': 'nosniff' });
+  if (c.env.FILES) {
+    const obj = await c.env.FILES.get(key);
+    if (!obj) return c.json({ error: 'Not found' }, 404);
+    obj.writeHttpMetadata(h); h.set('Cache-Control', cache);
+    return new Response(obj.body, { headers: h });
+  }
+  const row = await c.get('db').get('SELECT type, data FROM files WHERE key=?', key);
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  h.set('Content-Type', row.type);
+  return new Response(b64dec(row.data), { headers: h });
 }
