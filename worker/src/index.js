@@ -10,12 +10,6 @@ app.use('*', async (c, next) => {
   c.set('db', makeDb(c.env.DB));
   await next();
 });
-app.use('/api/*', async (c, next) => {
-  if (!c.env.JWT_SECRET || String(c.env.JWT_SECRET).length < 16)
-    return c.json({ error: 'Server is not configured: set the JWT_SECRET secret.' }, 500);
-  await next();
-});
-
 // Shows only true/false (never the values) so you can check the Cloudflare setup
 app.get('/api/health', (c) => c.json({
   ok: true,
